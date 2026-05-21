@@ -65,6 +65,7 @@ public class S3BackupProvider implements BackupProvider {
       this.bucketName = bucketNameOrUrl;
       this.client =
           S3AsyncClient.builder()
+              .crossRegionAccessEnabled(true)
               .asyncConfiguration(
                   b ->
                       b.advancedOption(
@@ -75,6 +76,7 @@ public class S3BackupProvider implements BackupProvider {
       this.bucketName = Paths.get(uri.getPath()).getFileName().toString();
       S3AsyncClientBuilder builder =
           S3AsyncClient.builder()
+              .crossRegionAccessEnabled(true)
               .asyncConfiguration(
                   b ->
                       b.advancedOption(
