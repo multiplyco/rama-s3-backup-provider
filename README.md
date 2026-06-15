@@ -33,3 +33,30 @@ On mac you may need to set DOCKER_HOST, e.g.
 To run integration tests
 
 `mvn verify`
+
+# Shaded build & relocation gates
+
+The fat jar is built with `maven-shade-plugin`, which **relocates** the bundled
+AWS SDK under `com.rpl.rama.backup.s3.shaded.*`. This is deliberate: the jar is
+dropped into a Rama cluster's `lib/` alongside an application module that carries
+its *own* AWS SDK. Without relocation the two copies share the `software.amazon.awssdk`
+package on one classpath and the older one silently shadows the newer (e.g. a
+missing `SdkSystemSetting.AWS_AUTH_SCHEME_PREFERENCE` field at runtime). Relocation
+makes that collision structurally impossible, so the bundled SDK version is free to
+differ from any application's. (`io.netty` is intentionally *not* bundled — Rama's
+own `lib/` supplies it; the relocated Netty async-HTTP wrapper binds to it.)
+
+Two mechanical gates guard the relocation and **must be rerun after any change to
+the bundled AWS SDK version** (both run automatically in CI, see
+`.github/workflows/shading-gate.yml`):
+
+```
+mvn -DskipTests package
+scripts/verify-shading.sh         # static:     asserts the SDK is fully relocated
+scripts/verify-shading-smoke.sh   # functional: shaded jar does real S3 I/O against
+                                  #             S3Mock with NO un-relocated SDK present
+```
+
+One residual check cannot live in this repo: a real Rama **backup → restore** on a
+throwaway cluster exercises Rama actually loading `S3BackupProvider` through its own
+classloader. Run it once per provider release.

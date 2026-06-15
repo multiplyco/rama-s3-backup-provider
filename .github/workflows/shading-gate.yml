@@ -1,0 +1,38 @@
+name: shading-gate
+
+# Guards the AWS SDK relocation that keeps this provider's bundled SDK from
+# colliding with a Rama application module's own AWS SDK on the shared worker
+# classpath. Both gates are mechanical and rerun automatically here, so a future
+# SDK version bump cannot merge without re-proving the relocation still holds.
+#
+# NOTE: a real Rama backup -> restore on a live cluster is the one residual check
+# that cannot live in this repo; run it once per release (see README).
+
+on:
+  push:
+    branches: [master]
+    tags: ['*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  shading-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Build shaded jar
+        run: mvn -B -DskipTests package
+
+      - name: Static gate — relocation completeness
+        run: ./scripts/verify-shading.sh
+
+      - name: Functional gate — shaded jar performs real S3 I/O (no un-relocated SDK)
+        run: ./scripts/verify-shading-smoke.sh
