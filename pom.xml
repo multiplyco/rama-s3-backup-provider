@@ -121,7 +121,9 @@
       <plugin>
         <groupId>io.fabric8</groupId>
         <artifactId>docker-maven-plugin</artifactId>
-        <version>0.43.4</version>
+        <!-- 0.43.4 fails to start containers against modern Docker Engine API
+             responses ("JsonObject.get(...) is null"); 0.45.1 fixes that. -->
+        <version>0.45.1</version>
         <configuration combine.self="override">
           <verbose>true</verbose>
           <!-- Even if this profile is active, we do not start the
@@ -227,22 +229,50 @@
           </execution>
         </executions>
       </plugin>
+       <!-- Build the fat jar with maven-shade-plugin (not maven-assembly-plugin)
+            so the bundled AWS SDK is RELOCATED into a private package. This jar
+            is dropped into Rama's lib/ alongside an application module's own AWS
+            SDK; without relocation the two copies collide on the shared worker
+            classpath and the older one silently shadows the newer (e.g. a missing
+            SdkSystemSetting.AWS_AUTH_SCHEME_PREFERENCE field). Relocation makes
+            that collision structurally impossible regardless of either side's
+            version. NOTE: io.netty is intentionally neither bundled (see the
+            exclusions above) nor relocated — it is supplied by Rama's own lib/
+            at deploy time, and the relocated Netty async-HTTP wrapper binds to it. -->
        <plugin>
             <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-assembly-plugin</artifactId>
-            <version>3.6.0</version>
-            <configuration>
-                <descriptorRefs>
-                    <descriptorRef>jar-with-dependencies</descriptorRef>
-                </descriptorRefs>
-            </configuration>
+            <artifactId>maven-shade-plugin</artifactId>
+            <version>3.5.3</version>
             <executions>
                 <execution>
-                    <id>make-assembly</id>
+                    <id>shade-relocate-aws-sdk</id>
                     <phase>package</phase>
                     <goals>
-                        <goal>single</goal>
+                        <goal>shade</goal>
                     </goals>
+                    <configuration>
+                        <createDependencyReducedPom>false</createDependencyReducedPom>
+                        <relocations>
+                            <relocation>
+                                <pattern>software.amazon.awssdk</pattern>
+                                <shadedPattern>com.rpl.rama.backup.s3.shaded.software.amazon.awssdk</shadedPattern>
+                            </relocation>
+                            <relocation>
+                                <pattern>software.amazon.eventstream</pattern>
+                                <shadedPattern>com.rpl.rama.backup.s3.shaded.software.amazon.eventstream</shadedPattern>
+                            </relocation>
+                            <relocation>
+                                <pattern>org.reactivestreams</pattern>
+                                <shadedPattern>com.rpl.rama.backup.s3.shaded.org.reactivestreams</shadedPattern>
+                            </relocation>
+                        </relocations>
+                        <transformers>
+                            <!-- Rename and rewrite META-INF/services/* entries to
+                                 the relocated package so ServiceLoader discovery
+                                 (e.g. SdkAsyncHttpService -> Netty) still resolves. -->
+                            <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                        </transformers>
+                    </configuration>
                 </execution>
             </executions>
         </plugin>
