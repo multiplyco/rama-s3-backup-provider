@@ -4,7 +4,7 @@
 
   <groupId>com.rpl</groupId>
   <artifactId>rama-s3-backup-provider</artifactId>
-  <version>1.1.1-PRE</version>
+  <version>1.1.2-PRE</version>
   <name>S3 Backup Provider</name>
   <description>A backup provider for Rama clusters that stores data in
       an S3 bucket on AWS.</description>
